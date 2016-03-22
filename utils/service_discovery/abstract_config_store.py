@@ -73,26 +73,30 @@ class AbstractConfigStore(object):
             return (check_name, init_config_tpl, instance_tpl)
         return None
 
-    def get_check_tpl(self, image, **kwargs):
-        """Retrieve template config strings from the ConfigStore."""
-        # this flag is used when no valid configuration store was provided
+    def get_check_tpls(self, image, **kwargs):
+        """Retrieve template configs for an image from the config_store or auto configuration."""
+        # TODO: make mixing both sources possible
+        templates = []
         trace_config = kwargs.get('trace_config', False)
-        source = ''
 
+        # this flag is used when no valid configuration store was provided
+        # it makes the method skip directly to the auto_conf
         if kwargs.get('auto_conf') is True:
             auto_config = self._get_auto_config(image)
             if auto_config is not None:
-                check_name, init_config_tpl, instance_tpl = auto_config
                 source = CONFIG_FROM_AUTOCONF
+                if trace_config:
+                    return [(source, auto_config)]
+                return [auto_config]
             else:
                 log.debug('No auto config was found for image %s, leaving it alone.' % image)
                 return None
         else:
             try:
                 # Try to read from the user-supplied config
-                check_name = self.client_read(path.join(self.sd_template_dir, image, 'check_name').lstrip('/'))
-                init_config_tpl = self.client_read(path.join(self.sd_template_dir, image, 'init_config').lstrip('/'))
-                instance_tpl = self.client_read(path.join(self.sd_template_dir, image, 'instance').lstrip('/'))
+                check_names = self.client_read(path.join(self.sd_template_dir, image, 'check_names').lstrip('/'))
+                init_config_tpls = self.client_read(path.join(self.sd_template_dir, image, 'init_configs').lstrip('/'))
+                instance_tpls = self.client_read(path.join(self.sd_template_dir, image, 'instances').lstrip('/'))
                 source = CONFIG_FROM_TEMPLATE
             except (KeyNotFound, TimeoutError):
                 # If it failed, try to read from auto-config templates
@@ -101,20 +105,29 @@ class AbstractConfigStore(object):
                 auto_config = self._get_auto_config(image)
                 if auto_config is not None:
                     source = CONFIG_FROM_AUTOCONF
-                    check_name, init_config_tpl, instance_tpl = auto_config
+                    # create list-format config based on an autoconf template
+                    check_names, init_config_tpls, instance_tpls = map(lambda x: [x], auto_config)
                 else:
                     log.debug('No auto config was found for image %s, leaving it alone.' % image)
                     return None
             except Exception:
-                log.warning(
+                log.error(
                     'Fetching the value for {0} in the config store failed, '
-                    'this check will not be configured by the service discovery.'.format(image))
+                    'this image will not be configured by the service discovery.'.format(image))
                 return None
-        if trace_config:
-            template = (source, (check_name, init_config_tpl, instance_tpl))
-        else:
-            template = (check_name, init_config_tpl, instance_tpl)
-        return template
+
+        if len(check_names) != len(init_config_tpls) or len(check_names) != len(instance_tpls):
+            log.error('Malformed configuration template: check_names, init_configs '
+                      'and instances are not all the same length. Image {0} '
+                      ' will not be configured by the service discovery'.format(image))
+            return None
+
+        for idx, c_name in enumerate(check_names):
+            if trace_config:
+                templates.append((source, (c_name, init_config_tpls[idx], instance_tpls[idx])))
+            else:
+                templates.append((c_name, init_config_tpls[idx], instance_tpls[idx]))
+        return templates
 
     def crawl_config_template(self):
         """Return whether or not configuration templates have changed since the previous crawl"""

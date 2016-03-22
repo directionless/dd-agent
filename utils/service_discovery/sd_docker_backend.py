@@ -143,61 +143,122 @@ class SDDockerBackend(AbstractSDBackend):
 
     def get_configs(self):
         """Get the config for all docker containers running on the host."""
+        configs = {}
         containers = [(
             container.get('Image').split(':')[0].split('/')[-1],
             container.get('Id'), container.get('Labels')
             ) for container in self.docker_client.containers()]
-        configs = {}
+
         # used by the configcheck agent command to trace where check configs come from
         trace_config = self.agentConfig.get('trace_config', False)
 
         for image, cid, labels in containers:
             try:
-                conf = self._get_check_config(cid, image, trace_config=trace_config)
-                if trace_config and conf is not None:
-                    source, conf = conf
-                if conf is not None:
-                    check_name = conf[0]
+                check_configs = self._get_check_configs(cid, image, trace_config=trace_config) or []
+                for conf in check_configs:
+                    if trace_config and conf is not None:
+                        source, conf = conf
+
+                    check_name, init_config, instance = conf
                     # build instances list if needed
                     if configs.get(check_name) is None:
                         if trace_config:
-                            configs[check_name] = (source, (conf[1], [conf[2]]))
+                            configs[check_name] = (source, (init_config, [instance]))
                         else:
-                            configs[check_name] = (conf[1], [conf[2]])
+                            configs[check_name] = (init_config, [instance])
                     else:
+                        conflict_init_msg = 'Different versions of `init_config` found for check {0}. ' \
+                            'Keeping the first one found.'
                         if trace_config:
-                            if configs[check_name][1][0] != conf[1]:
-                                log.warning('different versions of `init_config` found for check {0}.'
-                                            ' Keeping the first one found.'.format(check_name))
-                            configs[check_name][1][1].append(conf[2])
+                            if configs[check_name][1][0] != init_config:
+                                log.warning(conflict_init_msg.format(check_name))
+                            configs[check_name][1][1].append(instance)
                         else:
-                            if configs[check_name][0] != conf[1]:
-                                log.warning('different versions of `init_config` found for check {0}.'
-                                            ' Keeping the first one found.'.format(check_name))
-                            configs[check_name][1].append(conf[2])
+                            if configs[check_name][0] != init_config:
+                                log.warning(conflict_init_msg.format(check_name))
+                            configs[check_name][1].append(instance)
             except Exception:
                 log.exception('Building config for container %s based on image %s using service'
                               ' discovery failed, leaving it alone.' % (cid[:12], image))
-        log.debug('check configs: %s' % configs)
         return configs
 
-    def _get_check_config(self, c_id, image, trace_config=False):
-        """Retrieve a configuration template and fill it with data pulled from docker."""
+    def _get_check_configs(self, c_id, image, trace_config=False):
+        """Retrieve configuration templates and fill them with data pulled from docker and tags."""
         inspect = self.docker_client.inspect_container(c_id)
-        template_config = self._get_template_config(image, trace_config=trace_config)
-        if template_config is None:
-            log.debug('Template config is None, container %s with image %s '
+        config_templates = self._get_config_templates(image, trace_config=trace_config)
+        if config_templates is None:
+            log.debug('Config templates is None, container %s with image %s '
                       'will be left unconfigured.' % (c_id[:12], image))
             return None
 
-        if trace_config:
-            source, template_config = template_config
+        check_configs = []
+        tags = self.get_tags(inspect)
+        for config_tpl in config_templates:
+            if trace_config:
+                source, config_tpl = config_tpl
+            check_name, init_config_tpl, instance_tpl, variables = config_tpl
 
-        check_name, init_config_tpl, instance_tpl, variables = template_config
+            # insert tags in instance_tpl and get value for template variables
+            instance_tpl, var_values = self._fill_tpl(inspect, instance_tpl, variables, tags)
+
+            tpl = self._render_template(init_config_tpl or {}, instance_tpl or {}, var_values)
+            if tpl and len(tpl) == 2:
+                if trace_config and len(tpl[1]) == 2:
+                    source, (init_config, instance) = tpl
+                    check_configs.append((source, (check_name, init_config, instance)))
+                elif not trace_config:
+                    init_config, instance = tpl
+                    check_configs.append((check_name, init_config, instance))
+
+        return check_configs
+
+    def _get_config_templates(self, image_name, trace_config=False):
+        """Extract config templates for an image from a K/V store and returns it as a dict object."""
+        config_backend = self.agentConfig.get('sd_config_backend')
+        templates = []
+        if config_backend is None:
+            auto_conf = True
+            log.warning('No supported configuration backend was provided, using auto-config only.')
+        else:
+            auto_conf = False
+
+        # format: [('image', {init_tpl}, {instance_tpl})] without trace_config
+        # or      [(source, ('image', {init_tpl}, {instance_tpl}))] with trace_config
+        raw_tpls = self.config_store.get_check_tpls(image_name, auto_conf=auto_conf, trace_config=trace_config)
+        for tpl in raw_tpls:
+            if trace_config and tpl is not None:
+                # each template can come from either auto configuration or user-supplied templates
+                source, tpl = tpl
+            if tpl is not None and len(tpl) == 3:
+                check_name, init_config_tpl, instance_tpl = tpl
+            else:
+                log.debug('No template was found for image %s, leaving it alone.' % image_name)
+                return None
+            try:
+                # build a list of all variables to replace in the template
+                variables = self.PLACEHOLDER_REGEX.findall(str(init_config_tpl)) + \
+                    self.PLACEHOLDER_REGEX.findall(str(instance_tpl))
+                variables = map(lambda x: x.strip('%'), variables)
+                if not isinstance(init_config_tpl, dict):
+                    init_config_tpl = json.loads(init_config_tpl or '{}')
+                if not isinstance(instance_tpl, dict):
+                    instance_tpl = json.loads(instance_tpl)
+            except json.JSONDecodeError:
+                log.exception('Failed to decode the JSON template fetched for check {0}. Its configuration'
+                              ' by service discovery failed for {1}.'.format(check_name, image_name))
+                return None
+
+            if trace_config:
+                templates.append((source, (check_name, init_config_tpl, instance_tpl, variables)))
+            else:
+                templates.append((check_name, init_config_tpl, instance_tpl, variables))
+
+        return templates
+
+    def _fill_tpl(self, inspect, instance_tpl, variables, tags=None):
         var_values = {}
 
         # add default tags to the instance
-        tags = self.get_tags(inspect)
         if tags:
             tags += instance_tpl.get('tags', [])
             instance_tpl['tags'] = tags
@@ -222,52 +283,4 @@ class SDDockerBackend(AbstractSDBackend):
                     log.error("Could not find a value for the template variable %s: %s" % (v, str(ex)))
             else:
                 log.error("No method was found to interpolate template variable %s." % v)
-
-        tpl = self._render_template(init_config_tpl or {}, instance_tpl or {}, var_values)
-        if tpl:
-            init_config, instances = self._render_template(
-                init_config_tpl or {}, instance_tpl or {}, var_values)
-        else:
-            return None
-
-        if trace_config:
-            return (source, (check_name, init_config, instances))
-
-        return (check_name, init_config, instances)
-
-    def _get_template_config(self, image_name, trace_config=False):
-        """Extract a template config from a K/V store and returns it as a dict object."""
-        config_backend = self.agentConfig.get('sd_config_backend')
-        if config_backend is None:
-            auto_conf = True
-            log.warning('No supported configuration backend was provided, using auto-config only.')
-        else:
-            auto_conf = False
-
-        tpl = self.config_store.get_check_tpl(image_name, auto_conf=auto_conf, trace_config=trace_config)
-
-        if trace_config and tpl is not None:
-            source, tpl = tpl
-        if tpl is not None and len(tpl) == 3:
-            check_name, init_config_tpl, instance_tpl = tpl
-        else:
-            log.debug('No template was found for image %s, leaving it alone.' % image_name)
-            return None
-        try:
-            # build a list of all variables to replace in the template
-            variables = self.PLACEHOLDER_REGEX.findall(str(init_config_tpl)) + \
-                self.PLACEHOLDER_REGEX.findall(str(instance_tpl))
-            variables = map(lambda x: x.strip('%'), variables)
-            if not isinstance(init_config_tpl, dict):
-                init_config_tpl = json.loads(init_config_tpl or '{}')
-            if not isinstance(instance_tpl, dict):
-                instance_tpl = json.loads(instance_tpl)
-        except json.JSONDecodeError:
-            log.exception('Failed to decode the JSON template fetched from {0}. Configuration'
-                          ' by service discovery failed for {1}.'.format(config_backend, image_name))
-            return None
-
-        if trace_config:
-            return (source, (check_name, init_config_tpl, instance_tpl, variables))
-
-        return (check_name, init_config_tpl, instance_tpl, variables)
+        return instance_tpl, var_values
