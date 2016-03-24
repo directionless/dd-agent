@@ -16,6 +16,7 @@ from utils.platform import Platform
 # No more hardcoded default checks
 DEFAULT_CHECKS = []
 
+
 class TestConfig(unittest.TestCase):
     def testWhiteSpaceConfig(self):
         """Leading whitespace confuse ConfigParser
@@ -69,10 +70,10 @@ class TestConfig(unittest.TestCase):
             u'i-123445',
             u'5dfsdfsdrrfsv',
             u'432498234234A'
-            u'234234235235235235', # Couldn't find anything in the RFC saying it's not valid
+            u'234234235235235235',  # Couldn't find anything in the RFC saying it's not valid
             u'A45fsdff045-dsflk4dfsdc.ret43tjssfd',
             u'4354sfsdkfj4TEfdlv56gdgdfRET.dsf-dg',
-            u'r'*255,
+            u'r' * 255,
         ]
 
         not_valid_hostnames = [
@@ -93,11 +94,11 @@ class TestConfig(unittest.TestCase):
         # Make the function run as if it was on windows
         func = Platform.is_win32
         try:
-            Platform.is_win32 = staticmethod(lambda : True)
+            Platform.is_win32 = staticmethod(lambda: True)
 
             test_cases = [
-                ("C:\\Documents\\Users\\script.py:C:\\Documents\\otherscript.py", ["C:\\Documents\\Users\\script.py","C:\\Documents\\otherscript.py"]),
-                ("C:\\Documents\\Users\\script.py:parser.py", ["C:\\Documents\\Users\\script.py","parser.py"])
+                ("C:\\Documents\\Users\\script.py:C:\\Documents\\otherscript.py", ["C:\\Documents\\Users\\script.py", "C:\\Documents\\otherscript.py"]),
+                ("C:\\Documents\\Users\\script.py:parser.py", ["C:\\Documents\\Users\\script.py", "parser.py"])
             ]
 
             for test_case, expected_result in test_cases:
@@ -114,11 +115,14 @@ class TestConfig(unittest.TestCase):
             self.assertTrue(c in init_checks_names)
 
 
-TEMP_3RD_PARTY_CHECKS_DIR = '/tmp/dd-agent-tests/3rd-party'
-TEMP_ETC_CHECKS_DIR = '/tmp/dd-agent-tests/etc/checks.d'
-TEMP_ETC_CONF_DIR = '/tmp/dd-agent-tests/etc/conf.d'
-TEMP_AGENT_CHECK_DIR = '/tmp/dd-agent-tests'
-FIXTURE_PATH = 'tests/core/fixtures/checks'
+TMP_DIR = tempfile.gettempdir()
+DD_AGENT_TEST_DIR = 'dd-agent-tests'
+TEMP_3RD_PARTY_CHECKS_DIR = os.path.join(TMP_DIR, DD_AGENT_TEST_DIR, '3rd-party')
+TEMP_ETC_CHECKS_DIR = os.path.join(TMP_DIR, DD_AGENT_TEST_DIR, 'etc', 'checks.d')
+TEMP_ETC_CONF_DIR = os.path.join(TMP_DIR, DD_AGENT_TEST_DIR, 'etc', 'conf.d')
+TEMP_AGENT_CHECK_DIR = os.path.join(TMP_DIR, DD_AGENT_TEST_DIR)
+FIXTURE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'fixtures', 'checks')
+
 
 @mock.patch('config.get_checksd_path', return_value=TEMP_AGENT_CHECK_DIR)
 @mock.patch('config.get_confd_path', return_value=TEMP_ETC_CONF_DIR)
@@ -231,6 +235,27 @@ class TestConfigLoadCheckDirectory(unittest.TestCase):
         checks = load_check_directory({"nagios_perf_cfg": None, "additional_checksd": TEMP_ETC_CHECKS_DIR}, "foo")
         self.assertEquals(1, len(checks['initialized_checks']))
         self.assertEquals('valid_check_1', checks['initialized_checks'][0].check(None))
+
+    def testConfigDefault(self, *args):
+        copyfile('%s/valid_conf.yaml' % FIXTURE_PATH,
+            '%s/test_check.yaml.default' % TEMP_ETC_CONF_DIR)
+        copyfile('%s/valid_check_1.py' % FIXTURE_PATH,
+            '%s/test_check.py' % TEMP_ETC_CHECKS_DIR)
+        checks = load_check_directory({"additional_checksd": TEMP_ETC_CHECKS_DIR}, "foo")
+        self.assertEquals(1, len(checks['initialized_checks']))
+
+    def testConfigCustomOverDefault(self, *args):
+        copyfile('%s/valid_conf.yaml' % FIXTURE_PATH,
+            '%s/test_check.yaml.default' % TEMP_ETC_CONF_DIR)
+        # a 2nd valid conf file, slightly different so that we can test which one has been picked up
+        # (with 2 instances for instance)
+        copyfile('%s/valid_conf_2.yaml' % FIXTURE_PATH,
+            '%s/test_check.yaml' % TEMP_ETC_CONF_DIR)
+        copyfile('%s/valid_check_1.py' % FIXTURE_PATH,
+            '%s/test_check.py' % TEMP_ETC_CHECKS_DIR)
+        checks = load_check_directory({"additional_checksd": TEMP_ETC_CHECKS_DIR}, "foo")
+        self.assertEquals(1, len(checks['initialized_checks']))
+        self.assertEquals(2, checks['initialized_checks'][0].instance_count())  # check that we picked the right conf
 
     def tearDown(self):
         for _dir in self.TEMP_DIRS:
