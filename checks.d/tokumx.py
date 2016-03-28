@@ -3,6 +3,7 @@ import time
 import types
 
 # 3p
+import bson
 from pymongo import (
     MongoClient,
     ReadPreference,
@@ -453,7 +454,10 @@ class TokuMX(AgentCheck):
                     continue
 
                 # value is now status[x][y][z]
-                assert type(value) in (types.IntType, types.LongType, types.FloatType)
+                if type(value) == bson.int64.Int64:
+                    value = float(value)
+                else:
+                    assert type(value) in (types.IntType, types.LongType, types.FloatType)
 
                 # Check if metric is a gauge or rate
                 if m in self.GAUGES:
