@@ -1,14 +1,11 @@
 # std
 import logging
 import os
-import requests
 import simplejson as json
 
 # project
-from util import check_yaml
-from utils.checkfiles import get_conf_path
 from utils.dockerutil import DockerUtil
-from utils.kubeutil import KubeUtil, KUBERNETES_CHECK_NAME
+from utils.kubeutil import KubeUtil
 from utils.service_discovery.abstract_sd_backend import AbstractSDBackend
 from utils.service_discovery.config_stores import get_config_store, TRACE_CONFIG
 
@@ -44,9 +41,8 @@ class SDDockerBackend(AbstractSDBackend):
             log.debug("Didn't find the IP address for container %s (%s), using the kubernetes way." %
                       (container_inspect.get('Id', '')[:12], container_inspect.get('Config', {}).get('Image', '')))
             # kubernetes case
-            pod_list = self._get_pod_list()
+            pod_list = self.kubeutil.retrieve_pods_list().get('items', [])
             c_id = container_inspect.get('Id')
-
             for pod in pod_list:
                 pod_ip = pod.get('status', {}).get('podIP')
                 if pod_ip is None:
@@ -123,7 +119,7 @@ class SDDockerBackend(AbstractSDBackend):
 
     def _get_kube_config(self, c_id, key):
         """Get a part of a pod config from the kubernetes API"""
-        pods = self.kubeutil.retrieve_pods_list()
+        pods = self.kubeutil.retrieve_pods_list().get('items', [])
         for pod in pods:
             c_statuses = pod.get('status', {}).get('containerStatuses', [])
             for status in c_statuses:

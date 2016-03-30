@@ -2,6 +2,7 @@
 import copy
 import exceptions
 import mock
+import simplejson as json
 import unittest
 
 # project
@@ -25,6 +26,9 @@ class Response(object):
 
     def json(self):
         return self.content
+
+    def raise_for_status(self):
+        pass
 
 
 def _get_container_inspect(c_id):
@@ -56,7 +60,12 @@ def client_read(path):
     parts = path.split('/')
     config_parts = ['check_name', 'init_config', 'instance']
     image, config_part = parts[-2], parts[-1]
-    return str(TestServiceDiscovery.mock_templates.get(image)[0][config_parts.index(config_part)])
+    res = TestServiceDiscovery.mock_templates.get(image)[0][config_parts.index(config_part)]
+    # the name is not a JSON value, json.dump-ing it will add extra quotes around it
+    if config_part == 'check_name':
+        return res
+    else:
+        return json.dumps(res)
 
 
 class TestServiceDiscovery(unittest.TestCase):
@@ -126,8 +135,8 @@ class TestServiceDiscovery(unittest.TestCase):
 
     # sd_backend tests
 
-    @mock.patch('requests.get')
-    @mock.patch('utils.service_discovery.sd_docker_backend.check_yaml')
+    @mock.patch('utils.http.requests.get')
+    @mock.patch('utils.kubeutil.check_yaml')
     def test_get_host(self, mock_check_yaml, mock_get):
         kubernetes_config = {'instances': [{'kubelet_port': 1337}]}
         pod_list = {
@@ -147,7 +156,7 @@ class TestServiceDiscovery(unittest.TestCase):
         for c_ins, expected_ip, _ in self.container_inspects:
             with mock.patch.object(AbstractConfigStore, '__init__', return_value=None):
                 with mock.patch('utils.dockerutil.DockerUtil.client', return_value=None):
-                    with mock.patch('utils.service_discovery.sd_docker_backend.get_conf_path', return_value=None):
+                    with mock.patch('utils.kubeutil.get_conf_path', return_value=None):
                         sd_backend = get_sd_backend(agentConfig=self.auto_conf_agentConfig)
                         self.assertEqual(sd_backend._get_host(c_ins), expected_ip)
                         clear_singletons(sd_backend, self.auto_conf_agentConfig)
@@ -197,8 +206,8 @@ class TestServiceDiscovery(unittest.TestCase):
     def test_get_auto_config(self):
         """Test _get_auto_config"""
         expected_tpl = {
-            'redis': ('redisdb', '{}', '{"host": "%%host%%", "port": "%%port%%"}'),
-            'consul': ('consul', '{}', '{"url": "http://%%host%%:%%port%%", "catalog_checks": true, "service_whitelist": null, "new_leader_checks": true}'),
+            'redis': ('redisdb', None, {"host": "%%host%%", "port": "%%port%%"}),
+            'consul': ('consul', None, {"url": "http://%%host%%:%%port%%", "catalog_checks": True, "service_whitelist": None, "new_leader_checks": True}),
             'foobar': None
         }
 
@@ -216,7 +225,7 @@ class TestServiceDiscovery(unittest.TestCase):
         for image in valid_config:
             tpl = self.mock_templates.get(image)[0]
             self.assertEquals(tpl[0], config_store.get_check_tpl(image)[0])
-            self.assertEquals(str(tpl[1]), config_store.get_check_tpl(image)[1])
-            self.assertEquals(str(tpl[2]), config_store.get_check_tpl(image)[2])
+            self.assertEquals(tpl[1], config_store.get_check_tpl(image)[1])
+            self.assertEquals(tpl[2], config_store.get_check_tpl(image)[2])
         for image in invalid_config:
             self.assertEquals(None, config_store.get_check_tpl(image))
