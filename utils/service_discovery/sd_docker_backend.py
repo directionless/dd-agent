@@ -266,7 +266,7 @@ class SDDockerBackend(AbstractSDBackend):
             if not isinstance(init_config_tpl, dict):
                 init_config_tpl = json.loads(init_config_tpl or '{}')
             if not isinstance(instance_tpl, dict):
-                instance_tpl = json.loads(instance_tpl)
+                instance_tpl = json.loads(instance_tpl or '{}')
         except json.JSONDecodeError:
             log.exception('Failed to decode the JSON template fetched from {0}. Configuration'
                           ' by service discovery failed for {1}.'.format(config_backend, image_name))

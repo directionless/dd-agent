@@ -65,20 +65,16 @@ class AbstractConfigStore(object):
                 return None
 
             auto_conf = get_auto_conf(self.agentConfig, check_name)
-            init_config, instances = auto_conf.get('init_config'), auto_conf.get('instances')
+            init_config, instances = auto_conf.get('init_config', {}), auto_conf.get('instances', [])
+            return (check_name, init_config, instances[0] or {})
 
-            # stringify the dict to be consistent with what comes from the config stores
-            init_config_tpl = json.dumps(init_config) if init_config else '{}'
-            instance_tpl = json.dumps(instances[0]) if instances and len(instances) > 0 else '{}'
-
-            return (check_name, init_config_tpl, instance_tpl)
         return None
 
     def get_check_tpl(self, image, **kwargs):
         """Retrieve template config strings from the ConfigStore."""
-        # this flag is used when no valid configuration store was provided
         trace_config = kwargs.get(TRACE_CONFIG, False)
 
+        # this flag is used when no valid configuration store was provided
         if kwargs.get('auto_conf') is True:
             auto_config = self._get_auto_config(image)
             if auto_config is not None:
@@ -91,10 +87,12 @@ class AbstractConfigStore(object):
             try:
                 # Try to read from the user-supplied config
                 check_name = self.client_read(path.join(self.sd_template_dir, image, 'check_name').lstrip('/'))
-                init_config_tpl = self.client_read(path.join(self.sd_template_dir, image, 'init_config').lstrip('/'))
-                instance_tpl = self.client_read(path.join(self.sd_template_dir, image, 'instance').lstrip('/'))
+                init_config_tpl = json.loads(
+                    self.client_read(path.join(self.sd_template_dir, image, 'init_config').lstrip('/')))
+                instance_tpl = json.loads(
+                    self.client_read(path.join(self.sd_template_dir, image, 'instance').lstrip('/')))
                 source = CONFIG_FROM_TEMPLATE
-            except (KeyNotFound, TimeoutError) as ex:
+            except (KeyNotFound, TimeoutError, json.JSONDecodeError) as ex:
                 # first case is kind of expected, it means that no template was provided for this container
                 if isinstance(ex, KeyNotFound):
                     log.debug("Could not find directory {0} in the config store, "
@@ -103,8 +101,11 @@ class AbstractConfigStore(object):
                 elif isinstance(ex, TimeoutError):
                     log.warning("Connection to the config backend timed out. Is it reachable?\n"
                                 "Trying to auto-configure a check for the image %s..." % image)
-
-                # In both cases we try to read from auto-config templates
+                # the template is reachable but invalid
+                elif isinstance(ex, json.JSONDecodeError):
+                    log.error('Could not decode the JSON configuration template. '
+                              'Trying to auto-configure a check for the image %s...' % image)
+                # In any case cases we try to read from auto-config templates
                 auto_config = self._get_auto_config(image)
                 if auto_config is not None:
                     source = CONFIG_FROM_AUTOCONF
@@ -112,10 +113,10 @@ class AbstractConfigStore(object):
                 else:
                     log.debug('No auto config was found for image %s, leaving it alone.' % image)
                     return None
-            except Exception:
+            except Exception as ex:
                 log.warning(
-                    'Fetching the value for {0} in the config store failed, '
-                    'this check will not be configured by the service discovery.'.format(image))
+                    'Fetching the value for {0} in the config store failed, this check '
+                    'will not be configured by the service discovery. Error: {1}'.format(image, str(ex)))
                 return None
         if trace_config:
             template = (source, (check_name, init_config_tpl, instance_tpl))
