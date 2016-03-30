@@ -8,13 +8,11 @@ import simplejson as json
 from util import check_yaml
 from utils.checkfiles import get_conf_path
 from utils.dockerutil import DockerUtil
-from utils.kubeutil import _get_default_router, DEFAULT_KUBELET_PORT
+from utils.kubeutil import KubeUtil, KUBERNETES_CHECK_NAME
 from utils.service_discovery.abstract_sd_backend import AbstractSDBackend
 from utils.service_discovery.config_stores import get_config_store, TRACE_CONFIG
 
 log = logging.getLogger(__name__)
-
-KUBERNETES_CHECK_NAME = 'kubernetes'
 
 
 class SDDockerBackend(AbstractSDBackend):
@@ -22,6 +20,7 @@ class SDDockerBackend(AbstractSDBackend):
 
     def __init__(self, agentConfig):
         self.docker_client = DockerUtil().client
+        self.kubeutil = KubeUtil()
 
         try:
             self.config_store = get_config_store(agentConfig=agentConfig)
@@ -124,27 +123,12 @@ class SDDockerBackend(AbstractSDBackend):
 
     def _get_kube_config(self, c_id, key):
         """Get a part of a pod config from the kubernetes API"""
-        pods = self._get_pod_list()
+        pods = self.kubeutil.retrieve_pods_list()
         for pod in pods:
             c_statuses = pod.get('status', {}).get('containerStatuses', [])
             for status in c_statuses:
                 if c_id == status.get('containerID', '').split('//')[-1]:
                     return pod.get(key, {})
-
-    def _get_pod_list(self):
-        """Query the pod list from the kubernetes API and returns it as a list"""
-        host_ip = _get_default_router()
-        config_file_path = get_conf_path(KUBERNETES_CHECK_NAME)
-        try:
-            check_config = check_yaml(config_file_path)
-        except Exception:
-            log.error('Kubernetes configuration file is invalid. '
-                      'Trying connecting to kubelet with default settings anyway...')
-            check_config = {}
-        instances = check_config.get('instances', [{}])
-        kube_port = instances[0].get('kubelet_port', DEFAULT_KUBELET_PORT)
-        pod_list = requests.get('http://%s:%s/pods' % (host_ip, kube_port)).json()
-        return pod_list.get('items', [])
 
     def get_configs(self):
         """Get the config for all docker containers running on the host."""

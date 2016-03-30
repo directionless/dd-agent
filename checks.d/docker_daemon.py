@@ -10,7 +10,7 @@ from collections import defaultdict, Counter, deque
 from checks import AgentCheck
 from config import _is_affirmative
 from utils.dockerutil import DockerUtil, MountException
-from utils.kubeutil import get_kube_labels
+from utils.kubeutil import KubeUtil
 from utils.platform import Platform
 from utils.service_discovery.sd_backend import get_sd_backend
 
@@ -145,6 +145,7 @@ class DockerDaemon(AgentCheck):
             # Just needs to be done once
             self.docker_util = DockerUtil()
             self.docker_client = self.docker_util.client
+            self.kubeutil = KubeUtil()
             self._mountpoints = self.docker_util.get_mountpoints(CGROUP_METRICS)
             self.cgroup_listing_retries = 0
             self._latest_size_query = 0
@@ -211,7 +212,7 @@ class DockerDaemon(AgentCheck):
 
         if self.is_k8s():
             try:
-                self.kube_labels = get_kube_labels()
+                self.kube_labels = self.kubeutil.get_kube_labels()
             except Exception as e:
                 self.log.warning('Could not retrieve kubernetes labels: %s' % str(e))
                 self.kube_labels = {}
