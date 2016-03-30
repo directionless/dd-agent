@@ -201,6 +201,36 @@ class TestServiceDiscovery(unittest.TestCase):
                     for image in self.bad_mock_templates.keys():
                         self.assertEquals(sd_backend._get_template_config(image), None)
 
+    def test_render_template(self):
+        """Test _render_template"""
+        valid_configs = [
+            (({}, {'host': '%%host%%'}, {'host': 'foo'}),
+             ({}, {'host': 'foo'})),
+            (({}, {'host': '%%host%%', 'port': '%%port%%'}, {'host': 'foo', 'port': '1337'}),
+             ({}, {'host': 'foo', 'port': '1337'})),
+            (({'foo': '%%bar%%'}, {}, {'bar': 'w00t'}),
+             ({'foo': 'w00t'}, {})),
+            (({'foo': '%%bar%%'}, {'host': '%%host%%'}, {'bar': 'w00t', 'host': 'localhost'}),
+             ({'foo': 'w00t'}, {'host': 'localhost'}))
+        ]
+
+        invalid_configs = [
+            ({}, {'host': '%%host%%'}, {}),  # no value to use
+            ({}, {'host': '%%host%%'}, {'port': 42}),  # the variable name doesn't match
+            ({'foo': '%%bar%%'}, {'host': '%%host%%'}, {'host': 'foo'})  # not enough value/no matching var name
+        ]
+
+        for agentConfig in self.agentConfigs:
+            sd_backend = get_sd_backend(agentConfig=agentConfig)
+
+            for tpl, res in valid_configs:
+                init, instance, variables = tpl
+                config = sd_backend._render_template(init, instance, variables)
+                self.assertEquals(config, res)
+            for init, instance, variables in invalid_configs:
+                config = sd_backend._render_template(init, instance, variables)
+                self.assertEquals(config, None)
+
     # config_stores tests
 
     def test_get_auto_config(self):
