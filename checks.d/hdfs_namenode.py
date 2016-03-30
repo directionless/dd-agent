@@ -1,27 +1,29 @@
 '''
 HDFS NameNode Metrics
 ---------------------
-hdfs_namenode.capacity_total                    Total disk capacity in bytes
-hdfs_namenode.capacity_used                     Disk usage in bytes
-hdfs_namenode.capacity_remaining                Remaining disk space left in bytes
-hdfs_namenode.total_load                        Total load on the file system
-hdfs_namenode.fs_lock_queue_length              Lock queue length
-hdfs_namenode.blocks_total                      Total number of blocks
-hdfs_namenode.max_objects                       Maximum number of files HDFS supports
-hdfs_namenode.files_total                       Total number of files
-hdfs_namenode.pending_replication_blocks        Number of blocks pending replication
-hdfs_namenode.under_replicated_blocks           Number of under replicated blocks
-hdfs_namenode.scheduled_replication_blocks      Number of blocks scheduled for replication
-hdfs_namenode.pending_deletion_blocks           Number of pending deletion blocks
-hdfs_namenode.num_live_data_nodes               Total number of live data nodes
-hdfs_namenode.num_dead_data_nodes               Total number of dead data nodes
-hdfs_namenode.num_decom_live_data_nodes         Number of decommissioning live data nodes
-hdfs_namenode.num_decom_dead_data_nodes         Number of decommissioning dead data nodes
-hdfs_namenode.volume_failures_total             Total volume failures
-hdfs_namenode.estimated_capacity_lost_total     Estimated capacity lost in bytes
-hdfs_namenode.num_decommissioning_data_nodes    Number of decommissioning data nodes
-hdfs_namenode.num_stale_data_nodes              Number of stale data nodes
-hdfs_namenode.num_stale_storages                Number of stale storages
+hdfs.namenode.capacity_total                    Total disk capacity in bytes
+hdfs.namenode.capacity_used                     Disk usage in bytes
+hdfs.namenode.capacity_remaining                Remaining disk space left in bytes
+hdfs.namenode.total_load                        Total load on the file system
+hdfs.namenode.fs_lock_queue_length              Lock queue length
+hdfs.namenode.blocks_total                      Total number of blocks
+hdfs.namenode.max_objects                       Maximum number of files HDFS supports
+hdfs.namenode.files_total                       Total number of files
+hdfs.namenode.pending_replication_blocks        Number of blocks pending replication
+hdfs.namenode.under_replicated_blocks           Number of under replicated blocks
+hdfs.namenode.scheduled_replication_blocks      Number of blocks scheduled for replication
+hdfs.namenode.pending_deletion_blocks           Number of pending deletion blocks
+hdfs.namenode.num_live_data_nodes               Total number of live data nodes
+hdfs.namenode.num_dead_data_nodes               Total number of dead data nodes
+hdfs.namenode.num_decom_live_data_nodes         Number of decommissioning live data nodes
+hdfs.namenode.num_decom_dead_data_nodes         Number of decommissioning dead data nodes
+hdfs.namenode.volume_failures_total             Total volume failures
+hdfs.namenode.estimated_capacity_lost_total     Estimated capacity lost in bytes
+hdfs.namenode.num_decommissioning_data_nodes    Number of decommissioning data nodes
+hdfs.namenode.num_stale_data_nodes              Number of stale data nodes
+hdfs.namenode.num_stale_storages                Number of stale storages
+hdfs.namenode.missing_blocks                    Number of missing blocks
+hdfs.namenode.corrupt_blocks                    Number of corrupt blocks
 '''
 
 # stdlib
@@ -36,40 +38,48 @@ from simplejson import JSONDecodeError
 from checks import AgentCheck
 
 # Service check names
-JMX_SERVICE_CHECK = 'hdfs_namenode.jmx.can_connect'
+JMX_SERVICE_CHECK = 'hdfs.namenode.jmx.can_connect'
 
 # URL Paths
 JMX_PATH = 'jmx'
 
-# Namenode Bean
-HDFS_NAMENODE_BEAN_NAME = 'Hadoop:service=NameNode,name=FSNamesystemState'
+# Namesystem state bean
+HDFS_NAME_SYSTEM_STATE_BEAN = 'Hadoop:service=NameNode,name=FSNamesystemState'
+
+# Namesystem bean
+HDFS_NAME_SYSTEM_BEAN = 'Hadoop:service=NameNode,name=FSNamesystem'
 
 # Metric types
 GAUGE = 'gauge'
 
 # HDFS metrics
-HDFS_METRICS = {
-    'CapacityTotal' : ('hdfs_namenode.capacity_total',  GAUGE),
-    'CapacityUsed' : ('hdfs_namenode.capacity_used',  GAUGE),
-    'CapacityRemaining' : ('hdfs_namenode.capacity_remaining',  GAUGE),
-    'TotalLoad' : ('hdfs_namenode.total_load',  GAUGE),
-    'FsLockQueueLength' : ('hdfs_namenode.fs_lock_queue_length',  GAUGE),
-    'BlocksTotal' : ('hdfs_namenode.blocks_total',  GAUGE),
-    'MaxObjects' : ('hdfs_namenode.max_objects',  GAUGE),
-    'FilesTotal' : ('hdfs_namenode.files_total',  GAUGE),
-    'PendingReplicationBlocks' : ('hdfs_namenode.pending_replication_blocks',  GAUGE),
-    'UnderReplicatedBlocks' : ('hdfs_namenode.under_replicated_blocks',  GAUGE),
-    'ScheduledReplicationBlocks' : ('hdfs_namenode.scheduled_replication_blocks',  GAUGE),
-    'PendingDeletionBlocks' : ('hdfs_namenode.pending_deletion_blocks',  GAUGE),
-    'NumLiveDataNodes' : ('hdfs_namenode.num_live_data_nodes',  GAUGE),
-    'NumDeadDataNodes' : ('hdfs_namenode.num_dead_data_nodes',  GAUGE),
-    'NumDecomLiveDataNodes' : ('hdfs_namenode.num_decom_live_data_nodes',  GAUGE),
-    'NumDecomDeadDataNodes' : ('hdfs_namenode.num_decom_dead_data_nodes',  GAUGE),
-    'VolumeFailuresTotal' : ('hdfs_namenode.volume_failures_total',  GAUGE),
-    'EstimatedCapacityLostTotal' : ('hdfs_namenode.estimated_capacity_lost_total',  GAUGE),
-    'NumDecommissioningDataNodes' : ('hdfs_namenode.num_decommissioning_data_nodes',  GAUGE),
-    'NumStaleDataNodes' : ('hdfs_namenode.num_stale_data_nodes',  GAUGE),
-    'NumStaleStorages' : ('hdfs_namenode.num_stale_storages',  GAUGE),
+HDFS_NAME_SYSTEM_STATE_METRICS = {
+    'CapacityTotal' : ('hdfs.namenode.capacity_total',  GAUGE),
+    'CapacityUsed' : ('hdfs.namenode.capacity_used',  GAUGE),
+    'CapacityRemaining' : ('hdfs.namenode.capacity_remaining',  GAUGE),
+    'TotalLoad' : ('hdfs.namenode.total_load',  GAUGE),
+    'FsLockQueueLength' : ('hdfs.namenode.fs_lock_queue_length',  GAUGE),
+    'BlocksTotal' : ('hdfs.namenode.blocks_total',  GAUGE),
+    'MaxObjects' : ('hdfs.namenode.max_objects',  GAUGE),
+    'FilesTotal' : ('hdfs.namenode.files_total',  GAUGE),
+    'PendingReplicationBlocks' : ('hdfs.namenode.pending_replication_blocks',  GAUGE),
+    'UnderReplicatedBlocks' : ('hdfs.namenode.under_replicated_blocks',  GAUGE),
+    'ScheduledReplicationBlocks' : ('hdfs.namenode.scheduled_replication_blocks',  GAUGE),
+    'PendingDeletionBlocks' : ('hdfs.namenode.pending_deletion_blocks',  GAUGE),
+    'NumLiveDataNodes' : ('hdfs.namenode.num_live_data_nodes',  GAUGE),
+    'NumDeadDataNodes' : ('hdfs.namenode.num_dead_data_nodes',  GAUGE),
+    'NumDecomLiveDataNodes' : ('hdfs.namenode.num_decom_live_data_nodes',  GAUGE),
+    'NumDecomDeadDataNodes' : ('hdfs.namenode.num_decom_dead_data_nodes',  GAUGE),
+    'VolumeFailuresTotal' : ('hdfs.namenode.volume_failures_total',  GAUGE),
+    'EstimatedCapacityLostTotal' : ('hdfs.namenode.estimated_capacity_lost_total',  GAUGE),
+    'NumDecommissioningDataNodes' : ('hdfs.namenode.num_decommissioning_data_nodes',  GAUGE),
+    'NumStaleDataNodes' : ('hdfs.namenode.num_stale_data_nodes',  GAUGE),
+    'NumStaleStorages' : ('hdfs.namenode.num_stale_storages',  GAUGE),
+}
+
+HDFS_NAME_SYSTEM_METRICS = {
+    'MissingBlocks' : ('hdfs.namenode.missing_blocks', GAUGE),
+    'CorruptBlocks' : ('hdfs.namenode.corrupt_blocks', GAUGE)
 }
 
 class HDFSNameNode(AgentCheck):
@@ -80,15 +90,26 @@ class HDFSNameNode(AgentCheck):
             raise Exception('The JMX URL must be specified in the instance configuration')
 
         # Get metrics from JMX
-        self._hdfs_namenode_metrics(jmx_address)
+        self._hdfs_namenode_metrics(jmx_address,
+            HDFS_NAME_SYSTEM_STATE_BEAN,
+            HDFS_NAME_SYSTEM_STATE_METRICS)
 
-    def _hdfs_namenode_metrics(self, jmx_uri):
+        self._hdfs_namenode_metrics(jmx_address,
+            HDFS_NAME_SYSTEM_BEAN,
+            HDFS_NAME_SYSTEM_METRICS)
+
+        self.service_check(JMX_SERVICE_CHECK,
+            AgentCheck.OK,
+            tags=['namenode_url:' + jmx_address],
+            message='Connection to %s was successful' % jmx_address)
+
+    def _hdfs_namenode_metrics(self, jmx_uri, bean_name, metrics):
         '''
-        Get HDFS data node metrics from JMX
+        Get HDFS namenode metrics from JMX
         '''
         response = self._rest_request_to_json(jmx_uri,
             JMX_PATH,
-            query_params={'qry':HDFS_NAMENODE_BEAN_NAME})
+            query_params={'qry':bean_name})
 
         beans = response.get('beans', [])
 
@@ -99,14 +120,18 @@ class HDFSNameNode(AgentCheck):
             bean = next(iter(beans))
             bean_name = bean.get('name')
 
-            if bean_name != HDFS_NAMENODE_BEAN_NAME:
+            if bean_name != bean_name:
                 raise Exception("Unexpected bean name {0}".format(bean_name))
 
-            for metric, (metric_name, metric_type) in HDFS_METRICS.iteritems():
+            for metric, (metric_name, metric_type) in metrics.iteritems():
                 metric_value = bean.get(metric)
 
                 if metric_value is not None:
                     self._set_metric(metric_name, metric_type, metric_value, tags)
+
+            if 'CapacityUsed' in bean and 'CapacityTotal' in bean:
+                self._set_metric('hdfs.namenode.capacity_in_use', GAUGE,
+                                 float(bean['CapacityUsed']) / float(bean['CapacityTotal']), tags)
 
     def _set_metric(self, metric_name, metric_type, value, tags=None):
         '''
@@ -169,17 +194,10 @@ class HDFSNameNode(AgentCheck):
             self.service_check(JMX_SERVICE_CHECK,
                 AgentCheck.CRITICAL,
                 tags=service_check_tags,
-                message=e)
+                message=str(e))
             raise
 
-        else:
-            self.service_check(JMX_SERVICE_CHECK,
-                AgentCheck.OK,
-                tags=service_check_tags,
-                message='Connection to %s was successful' % url)
-
         return response_json
-
 
     def _join_url_dir(self, url, *args):
         '''

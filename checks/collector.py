@@ -21,7 +21,6 @@ from config import get_system_stats, get_version
 from resources.processes import Processes as ResProcesses
 import checks.system.unix as u
 import checks.system.win32 as w32
-import checks.system.common as common
 import modules
 from util import (
     EC2,
@@ -189,7 +188,7 @@ class Collector(object):
             'memory': u.Memory(log),
             'processes': u.Processes(log),
             'cpu': u.Cpu(log),
-            'system': common.System(log)
+            'system': u.System(log)
         }
 
         # Win32 System `Checks
@@ -199,7 +198,7 @@ class Collector(object):
             'memory': w32.Memory(log),
             'network': w32.Network(log),
             'cpu': w32.Cpu(log),
-            'system': common.System(log)
+            'system': w32.System(log)
         }
 
         # Old-style metric checks
@@ -289,6 +288,7 @@ class Collector(object):
                 metrics.extend(self._win32_system_checks['network'].check(self.agentConfig))
                 metrics.extend(self._win32_system_checks['io'].check(self.agentConfig))
                 metrics.extend(self._win32_system_checks['proc'].check(self.agentConfig))
+                metrics.extend(self._win32_system_checks['system'].check(self.agentConfig))
             except Exception:
                 log.exception('Unable to fetch Windows system metrics.')
         else:
@@ -646,7 +646,7 @@ class Collector(object):
                 if e.errno == 2:  # file not found, expected when install from source
                     log.info("gohai file not found")
                 else:
-                    raise e
+                    log.warning("Unexpected OSError when running gohai %s", e)
             except Exception as e:
                 log.warning("gohai command failed with error %s" % str(e))
 
@@ -753,7 +753,7 @@ class Collector(object):
             pass
 
         metadata["hostname"] = self.hostname
-        metadata["timezones"] = time.tzname
+        metadata["timezones"] = sanitize_tzname(time.tzname)
 
         # Add cloud provider aliases
         host_aliases = GCE.get_host_aliases(self.agentConfig)
@@ -773,3 +773,12 @@ class Collector(object):
             return True
 
         return False
+
+def sanitize_tzname(tzname):
+    """ Returns the tzname given, and deals with Japanese encoding issue
+    """
+    if tzname[0] == '\x93\x8c\x8b\x9e (\x95W\x8f\x80\x8e\x9e)':
+        log.debug('tzname from TOKYO detected and converted')
+        return ('JST', 'JST')
+    else:
+        return tzname
