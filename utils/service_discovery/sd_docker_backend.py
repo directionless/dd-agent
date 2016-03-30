@@ -5,7 +5,7 @@ import simplejson as json
 
 # project
 from utils.dockerutil import DockerUtil
-from utils.kubeutil import KubeUtil
+from utils.kubeutil import KubeUtil, is_k8s
 from utils.service_discovery.abstract_sd_backend import AbstractSDBackend
 from utils.service_discovery.config_stores import get_config_store, TRACE_CONFIG
 
@@ -17,7 +17,8 @@ class SDDockerBackend(AbstractSDBackend):
 
     def __init__(self, agentConfig):
         self.docker_client = DockerUtil().client
-        self.kubeutil = KubeUtil()
+        if is_k8s():
+            self.kubeutil = KubeUtil()
 
         try:
             self.config_store = get_config_store(agentConfig=agentConfig)
@@ -38,9 +39,11 @@ class SDDockerBackend(AbstractSDBackend):
         """Extract the host IP from a docker inspect object, or the kubelet API."""
         ip_addr = container_inspect.get('NetworkSettings', {}).get('IPAddress')
         if not ip_addr:
+            if not is_k8s():
+                return
+            # kubernetes case
             log.debug("Didn't find the IP address for container %s (%s), using the kubernetes way." %
                       (container_inspect.get('Id', '')[:12], container_inspect.get('Config', {}).get('Image', '')))
-            # kubernetes case
             pod_list = self.kubeutil.retrieve_pods_list().get('items', [])
             c_id = container_inspect.get('Id')
             for pod in pod_list:
@@ -64,12 +67,11 @@ class SDDockerBackend(AbstractSDBackend):
         except (IndexError, KeyError, AttributeError):
             log.debug("Didn't find the port for container %s (%s), trying the kubernetes way." %
                       (c_id[:12], container_inspect.get('Config', {}).get('Image', '')))
-            # kubernetes case
             # first we try to get it from the docker API
             # it works if the image has an EXPOSE instruction
             ports = map(lambda x: x.split('/')[0], container_inspect['Config'].get('ExposedPorts', {}).keys())
             # if it failed, try with the kubernetes API
-            if not ports:
+            if not ports and is_k8s():
                 co_statuses = self._get_kube_config(c_id, 'status').get('containerStatuses', [])
                 c_name = None
                 for co in co_statuses:
@@ -86,8 +88,7 @@ class SDDockerBackend(AbstractSDBackend):
     def get_tags(self, c_inspect):
         """Extract useful tags from docker or platform APIs. These are collected by default."""
         tags = []
-        # if is_kubernetes
-        if os.environ.get('KUBERNETES_PORT', False):
+        if is_k8s():
             pod_metadata = self._get_kube_config(c_inspect.get('Id'), 'metadata')
 
             if pod_metadata is None:
@@ -111,10 +112,11 @@ class SDDockerBackend(AbstractSDBackend):
 
     def _get_additional_tags(self, container_inspect):
         tags = []
-        pod_metadata = self._get_kube_config(container_inspect.get('Id'), 'metadata')
-        pod_spec = self._get_kube_config(container_inspect.get('Id'), 'spec')
-        tags.append('node_name:%s' % pod_spec.get('nodeName'))
-        tags.append('pod_name:%s' % pod_metadata.get('name'))
+        if is_k8s():
+            pod_metadata = self._get_kube_config(container_inspect.get('Id'), 'metadata')
+            pod_spec = self._get_kube_config(container_inspect.get('Id'), 'spec')
+            tags.append('node_name:%s' % pod_spec.get('nodeName'))
+            tags.append('pod_name:%s' % pod_metadata.get('name'))
         return tags
 
     def _get_kube_config(self, c_id, key):

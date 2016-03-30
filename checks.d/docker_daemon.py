@@ -145,7 +145,8 @@ class DockerDaemon(AgentCheck):
             # Just needs to be done once
             self.docker_util = DockerUtil()
             self.docker_client = self.docker_util.client
-            self.kubeutil = KubeUtil()
+            if self.is_k8s():
+                self.kubeutil = KubeUtil()
             self._mountpoints = self.docker_util.get_mountpoints(CGROUP_METRICS)
             self.cgroup_listing_retries = 0
             self._latest_size_query = 0

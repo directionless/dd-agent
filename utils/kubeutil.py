@@ -1,5 +1,6 @@
 # stdlib
 import logging
+import os
 import socket
 import struct
 from urlparse import urljoin
@@ -13,6 +14,10 @@ from utils.singleton import Singleton
 log = logging.getLogger('collector')
 
 KUBERNETES_CHECK_NAME = 'kubernetes'
+
+
+def is_k8s():
+    return os.environ.get('KUBERNETES_PORT', False)
 
 
 class KubeUtil():
