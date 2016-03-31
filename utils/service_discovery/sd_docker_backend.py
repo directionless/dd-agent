@@ -185,7 +185,7 @@ class SDDockerBackend(AbstractSDBackend):
                 source, config_tpl = config_tpl
             check_name, init_config_tpl, instance_tpl, variables = config_tpl
 
-            # insert tags in instance_tpl and get value for template variables
+            # insert tags in instance_tpl and process values for template variables
             instance_tpl, var_values = self._fill_tpl(inspect, instance_tpl, variables, tags)
 
             tpl = self._render_template(init_config_tpl or {}, instance_tpl or {}, var_values)

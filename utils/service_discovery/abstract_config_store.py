@@ -87,7 +87,7 @@ class AbstractConfigStore(object):
                 return [auto_config]
             else:
                 log.debug('No auto config was found for image %s, leaving it alone.' % image)
-                return None
+                return []
         else:
             try:
                 # Try to read from the user-supplied config
@@ -119,18 +119,18 @@ class AbstractConfigStore(object):
                     check_names, init_config_tpls, instance_tpls = map(lambda x: [x], auto_config)
                 else:
                     log.debug('No auto config was found for image %s, leaving it alone.' % image)
-                    return None
+                    return []
             except Exception as ex:
                 log.warning(
                     'Fetching the value for {0} in the config store failed, this check '
                     'will not be configured by the service discovery. Error: {1}'.format(image, str(ex)))
-                return None
+                return []
 
         if len(check_names) != len(init_config_tpls) or len(check_names) != len(instance_tpls):
             log.error('Malformed configuration template: check_names, init_configs '
                       'and instances are not all the same length. Image {0} '
-                      ' will not be configured by the service discovery'.format(image))
-            return None
+                      'will not be configured by the service discovery'.format(image))
+            return []
 
         for idx, c_name in enumerate(check_names):
             if trace_config:
