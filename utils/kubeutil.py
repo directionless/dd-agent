@@ -17,7 +17,7 @@ KUBERNETES_CHECK_NAME = 'kubernetes'
 
 
 def is_k8s():
-    return os.environ.get('KUBERNETES_PORT', False)
+    return 'KUBERNETES_PORT' in os.environ
 
 
 class KubeUtil():
@@ -54,7 +54,7 @@ class KubeUtil():
             '%s://%s:%d' % (self.method, self.host, self.kubelet_port), KubeUtil.PODS_LIST_PATH)
 
         self.master_url_nodes = '%s://%s:%d/api/v1/nodes' % (self.method, self.master_host, self.master_port)
-        self.kube_health_url = '%s://%s:%d/healthz' % (self.method, self.host, self.kubelet_port),
+        self.kube_health_url = '%s://%s:%d/healthz' % (self.method, self.host, self.kubelet_port)
 
     def get_kube_labels(self):
         pods = retrieve_json(self.pods_list_url)

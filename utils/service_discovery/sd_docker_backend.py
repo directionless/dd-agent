@@ -1,6 +1,5 @@
 # std
 import logging
-import os
 import simplejson as json
 
 # project
@@ -173,9 +172,9 @@ class SDDockerBackend(AbstractSDBackend):
         """Retrieve configuration templates and fill them with data pulled from docker and tags."""
         inspect = self.docker_client.inspect_container(c_id)
         config_templates = self._get_config_templates(image, trace_config=trace_config)
-        if config_templates is None:
-            log.debug('Config templates is None, container %s with image %s '
-                      'will be left unconfigured.' % (c_id[:12], image))
+        if not config_templates:
+            log.debug('No config template for container %s with image %s. '
+                      'It will be left unconfigured.' % (c_id[:12], image))
             return None
 
         check_configs = []
