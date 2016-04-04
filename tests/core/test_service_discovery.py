@@ -201,6 +201,7 @@ class TestServiceDiscovery(unittest.TestCase):
                     self.assertEquals(
                         sd_backend._get_check_configs(c_id, image)[0],
                         self.mock_templates[image][1])
+                    clear_singletons(sd_backend, self.auto_conf_agentConfig)
 
     @mock.patch.object(AbstractConfigStore, 'get_check_tpls', side_effect=_get_check_tpls)
     def test_get_config_templates(self, mock_get_check_tpls):
@@ -217,6 +218,7 @@ class TestServiceDiscovery(unittest.TestCase):
                     # error cases
                     for image in self.bad_mock_templates.keys():
                         self.assertEquals(sd_backend._get_config_templates(image), None)
+                    clear_singletons(sd_backend, agentConfig)
 
     def test_render_template(self):
         """Test _render_template"""
@@ -239,7 +241,6 @@ class TestServiceDiscovery(unittest.TestCase):
 
         for agentConfig in self.agentConfigs:
             sd_backend = get_sd_backend(agentConfig=agentConfig)
-
             for tpl, res in valid_configs:
                 init, instance, variables = tpl
                 config = sd_backend._render_template(init, instance, variables)
@@ -247,6 +248,46 @@ class TestServiceDiscovery(unittest.TestCase):
             for init, instance, variables in invalid_configs:
                 config = sd_backend._render_template(init, instance, variables)
                 self.assertEquals(config, None)
+                clear_singletons(sd_backend, agentConfig)
+
+    def test_fill_tpl(self):
+        """Test _fill_tpl with mock _get_ports"""
+        valid_configs = [
+            # ((inspect, instance_tpl, variables, tags), (expected_instance_tpl, expected_var_values))
+            (
+                ({}, {'host': 'localhost'}, [], None),
+                ({'host': 'localhost'}, {})
+            ),
+            (
+                ({'NetworkSettings': {'IPAddress': '127.0.0.1'}},
+                 {'host': '%%host%%', 'port': 1337}, ['host'], ['foo', 'bar:baz']),
+                ({'host': '%%host%%', 'port': 1337, 'tags': ['foo', 'bar:baz']}, {'host': '127.0.0.1'})
+            ),
+            (
+                ({'NetworkSettings': {'IPAddress': '127.0.0.1', 'Ports': {'42/tcp': None, '22/tcp': None}}},
+                 {'host': '%%host%%', 'port': '%%port_1%%', 'tags': ['env:test']},
+                 ['host', 'port_1'], ['foo', 'bar:baz']),
+                ({'host': '%%host%%', 'port': '%%port_1%%', 'tags': ['env:test', 'foo', 'bar:baz']},
+                 {'host': '127.0.0.1', 'port_1': '42'})
+            )
+        ]
+
+        for ac in self.agentConfigs:
+            sd_backend = get_sd_backend(agentConfig=ac)
+            try:
+                for co in valid_configs:
+                    inspect, tpl, variables, tags = co[0]
+                    instance_tpl, var_values = sd_backend._fill_tpl(inspect, tpl, variables, tags)
+                    for key in instance_tpl.keys():
+                        if isinstance(instance_tpl[key], list):
+                            self.assertItemsEqual(instance_tpl[key], co[1][0].get(key))
+                        else:
+                            self.assertEquals(instance_tpl[key], co[1][0].get(key))
+                    self.assertEquals(var_values, co[1][1])
+                clear_singletons(sd_backend, ac)
+            except Exception:
+                clear_singletons(sd_backend, ac)
+                raise
 
     # config_stores tests
 

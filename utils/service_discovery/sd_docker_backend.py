@@ -242,12 +242,14 @@ class SDDockerBackend(AbstractSDBackend):
         return templates
 
     def _fill_tpl(self, inspect, instance_tpl, variables, tags=None):
+        """Add container tags to instance templates and build a """
+        """dict from template variable names and their values."""
         var_values = {}
 
         # add default tags to the instance
         if tags:
             tags += instance_tpl.get('tags', [])
-            instance_tpl['tags'] = tags
+            instance_tpl['tags'] = list(set(tags))
 
         for v in variables:
             # variables can be suffixed with an index in case a list is found
