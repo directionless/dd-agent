@@ -146,7 +146,10 @@ class Agent(Daemon):
         hostname = get_hostname(self._agentConfig)
         systemStats = get_system_stats()
         emitters = self._get_emitters()
-        self.sd_backend = get_sd_backend(self._agentConfig)
+
+        # Initialize service discovery
+        if self._agentConfig.get('service_discovery'):
+            self.sd_backend = get_sd_backend(self._agentConfig)
 
         # Load the checks.d checks
         self._checksd = load_check_directory(self._agentConfig, hostname)
@@ -196,7 +199,7 @@ class Agent(Daemon):
             # Look for change in the config template store.
             # The self.sd_backend.reload_check_configs flag is set
             # to True if a config reload is needed.
-            if self._agentConfig.get('service_discovery') and \
+            if self._agentConfig.get('service_discovery') and self.sd_backend and \
                not self.sd_backend.reload_check_configs:
                 try:
                     self.sd_backend.reload_check_configs = get_config_store(
@@ -205,8 +208,10 @@ class Agent(Daemon):
                     log.warn('Something went wrong while looking for config template changes: %s' % str(e))
 
             # Check if we should run service discovery
-            # This flag can be set through the docker_daemon check or using ConfigStore.crawl_config_template
-            if self.sd_backend.reload_check_configs:
+            # The `reload_check_configs` flag can be set through the docker_daemon check or
+            # using ConfigStore.crawl_config_template
+            if self._agentConfig.get('service_discovery') and self.sd_backend and \
+               self.sd_backend.reload_check_configs:
                 self.reload_configs()
                 self.configs_reloaded = True
                 self.sd_backend.reload_check_configs = False

@@ -135,7 +135,7 @@ class DockerDaemon(AgentCheck):
             agentConfig.get('service_discovery_backend') == 'docker'
 
     def is_k8s(self):
-        return self.is_check_enabled("kubernetes")
+        return 'KUBERNETES_PORT' in os.environ
 
     def init(self):
         try:

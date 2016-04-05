@@ -48,8 +48,8 @@ def print_templates(agentConfig):
             print(
                 "- Image %s:\n\tcheck name: %s\n\tinit_config: %s\n\tinstance: %s" % (
                     img,
-                    tpl.get('check_name'),
-                    tpl.get('init_config'),
-                    tpl.get('instance'),
+                    tpl.get('check_names'),
+                    tpl.get('init_configs'),
+                    tpl.get('instances'),
                 )
             )
