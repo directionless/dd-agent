@@ -267,7 +267,7 @@ class TokuMX(AgentCheck):
 
         return ssl_params
 
-    def _get_connection(self, instance):
+    def _get_connection(self, instance, read_preference=None):
         if 'server' not in instance:
             raise Exception("Missing 'server' in tokumx config")
 
@@ -308,7 +308,13 @@ class TokuMX(AgentCheck):
             self.log.debug("TokuMX: cannot extract username and password from config %s" % server)
             do_auth = False
         try:
-            conn = MongoClient(server, socketTimeoutMS=DEFAULT_TIMEOUT*1000, **ssl_params)
+            if read_preference:
+                conn = MongoClient(server,
+                                   socketTimeoutMS=DEFAULT_TIMEOUT*1000,
+                                   read_preference=ReadPreference.SECONDARY,
+                                   **ssl_params)
+            else:
+                conn = MongoClient(server, socketTimeoutMS=DEFAULT_TIMEOUT*1000, **ssl_params)
             db = conn[db_name]
         except Exception:
             self.service_check(self.SERVICE_CHECK_NAME, AgentCheck.CRITICAL, tags=service_check_tags)
@@ -364,12 +370,7 @@ class TokuMX(AgentCheck):
                     self.log.debug("Current replSet member is secondary. "
                                    "Creating new connection to set read_preference to secondary.")
                     # need a new connection to deal with replica sets
-                    ssl_params = self._get_ssl_params(instance)
-                    conn = MongoClient(server,
-                                       socketTimeoutMS=DEFAULT_TIMEOUT*1000,
-                                       read_preference=ReadPreference.SECONDARY,
-                                       **ssl_params)
-                    db = conn[db.name]
+                    server, conn, db, _ = self._get_connection(instance, read_preference=ReadPreference.SECONDARY)
 
                 data['state'] = replSet['myState']
                 self.check_last_state(data['state'], server, self.agentConfig)
@@ -470,9 +471,10 @@ class TokuMX(AgentCheck):
 
                 # value is now status[x][y][z]
                 if type(value) == bson.int64.Int64:
-                    value = float(value)
+                    value = long(value)
                 else:
-                    assert type(value) in (types.IntType, types.LongType, types.FloatType)
+                    if type(value) not in (types.IntType, types.LongType, types.FloatType):
+                        self.log.warning("Value found that is not of type int, int64,long, or float")
 
                 # Check if metric is a gauge or rate
                 if m in self.GAUGES:
