@@ -184,6 +184,7 @@ class AgentStatus(object):
             ("Platform", platform.platform()),
             ("Python Version", platform.python_version()),
             ("Logs", logger_info()),
+            ("Architecture", platform.machine()),
         ]
 
         for key, value in fields:
