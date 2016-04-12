@@ -179,12 +179,17 @@ class AgentStatus(object):
             )
         ]
 
+        if sys.maxsize > 2**32:
+            arch = "64bit"
+        else:
+            arch = "32bit"
+
         fields += [
             ("Pid", self.created_by_pid),
             ("Platform", platform.platform()),
             ("Python Version", "%s, %s" % (
                 platform.python_version(),
-                platform.architecture()[0])),
+                arch)),
             ("Logs", logger_info()),
         ]
 
