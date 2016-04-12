@@ -182,9 +182,10 @@ class AgentStatus(object):
         fields += [
             ("Pid", self.created_by_pid),
             ("Platform", platform.platform()),
-            ("Python Version", platform.python_version()),
+            ("Python Version", "%s, %s" % (
+                platform.python_version(),
+                platform.architecture()[0])),
             ("Logs", logger_info()),
-            ("Architecture", platform.machine()),
         ]
 
         for key, value in fields:
