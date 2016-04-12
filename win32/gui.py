@@ -396,11 +396,16 @@ class HTMLWindow(QTextEdit):
             dogstatsd_status = DogstatsdStatus.load_latest_status()
             forwarder_status = ForwarderStatus.load_latest_status()
             collector_status = CollectorStatus.load_latest_status()
+            if sys.maxsize > 2**32:
+                python_architecture = "64bit"
+            else:
+                python_architecture = "32bit"
             generated_template = loaded_template.load("status.html").generate(
                 port=22,
                 platform=platform.platform(),
                 agent_version=get_version(),
                 python_version=platform.python_version(),
+                python_architecture=python_architecture,
                 logger_info=logger_info(),
                 dogstatsd=dogstatsd_status.to_dict(),
                 forwarder=forwarder_status.to_dict(),
